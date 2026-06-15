@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Green Key Remover Local</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Local HTML / JS / CSS only</p>
+        <h1>Green Key Remover</h1>
+        <p class="lead">画像をドラッグすると、ブラウザ上だけで緑背景を抜いて透過PNGを作成します。サーバー不要・外部ライブラリ不要です。</p>
+      </div>
+    </header>
+
+    <section id="dropZone" class="drop-zone" tabindex="0">
+      <input id="fileInput" type="file" accept="image/*" hidden />
+      <div class="drop-inner">
+        <div class="drop-icon">＋</div>
+        <h2>ここに画像をドラッグ</h2>
+        <p>またはクリックして画像を選択</p>
+      </div>
+    </section>
+
+    <section class="controls" aria-label="Chroma key settings">
+      <div class="control">
+        <label for="greenMin">緑の明るさしきい値 <span id="greenMinValue">120</span></label>
+        <input id="greenMin" type="range" min="0" max="255" value="120" />
+      </div>
+
+      <div class="control">
+        <label for="greenStrength">緑優位しきい値 <span id="greenStrengthValue">55</span></label>
+        <input id="greenStrength" type="range" min="0" max="180" value="55" />
+      </div>
+
+      <div class="control">
+        <label for="greenRatio">緑比率しきい値 <span id="greenRatioValue">0.43</span></label>
+        <input id="greenRatio" type="range" min="0.20" max="0.80" step="0.01" value="0.43" />
+      </div>
+
+      <div class="control">
+        <label for="edgeSoftness">エッジぼかし <span id="edgeSoftnessValue">1.00</span></label>
+        <input id="edgeSoftness" type="range" min="0" max="1.5" step="0.05" value="1.00" />
+      </div>
+
+      <div class="control inline">
+        <label>
+          <input id="despill" type="checkbox" checked />
+          緑フリンジを抑える
+        </label>
+      </div>
+
+      <div class="control inline">
+        <label>
+          <input id="cleanup" type="checkbox" checked />
+          アルファの小ノイズを整理
+        </label>
+      </div>
+
+      <button id="resetButton" type="button" class="secondary">初期値に戻す</button>
+    </section>
+
+    <section class="actions">
+      <a id="downloadLink" class="download disabled" download="transparent.png" href="#" aria-disabled="true">PNGをダウンロード</a>
+      <p id="status" class="status">画像を読み込んでください。</p>
+    </section>
+
+    <section class="preview-grid">
+      <article class="preview-card">
+        <div class="card-head">
+          <h3>Original</h3>
+          <span id="originalInfo">-</span>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="originalCanvas"></canvas>
+        </div>
+      </article>
+
+      <article class="preview-card">
+        <div class="card-head">
+          <h3>Transparent PNG</h3>
+          <span id="resultInfo">-</span>
+        </div>
+        <div class="canvas-wrap checker">
+          <canvas id="resultCanvas"></canvas>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
