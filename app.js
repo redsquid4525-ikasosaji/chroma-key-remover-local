@@ -8,6 +8,9 @@
   const originalCanvas = $("originalCanvas");
   const resultCanvas = $("resultCanvas");
   const resultDrop = $("resultDrop");
+  const cropStage = $("cropStage");
+  const cropOverlay = $("cropOverlay");
+  const cropBox = $("cropBox");
   const originalInfo = $("originalInfo");
   const resultInfo = $("resultInfo");
   const downloadLink = $("downloadLink");
@@ -55,7 +58,9 @@
     outputBlob: null,
     outputFileName: "transparent.png",
     processedCanvas: document.createElement("canvas"),
+    exportCanvas: document.createElement("canvas"),
     crop: { x: 0, y: 0, w: 1, h: 1 },
+    cropDrag: null,
   };
 
   function clamp(value, min, max) {
@@ -133,6 +138,43 @@
     cropInputs.h.value = state.crop.h;
   }
 
+  function getDisplayMetrics() {
+    const source = state.processedCanvas;
+    const rect = resultCanvas.getBoundingClientRect();
+    const scaleX = rect.width / Math.max(1, source.width);
+    const scaleY = rect.height / Math.max(1, source.height);
+    return { rect, scaleX, scaleY };
+  }
+
+  function updateCropOverlay() {
+    const source = state.processedCanvas;
+    if (!source.width || !source.height) {
+      cropOverlay.classList.add("is-hidden");
+      return;
+    }
+
+    const { rect, scaleX, scaleY } = getDisplayMetrics();
+    cropStage.style.width = `${rect.width}px`;
+    cropStage.style.height = `${rect.height}px`;
+    cropOverlay.classList.remove("is-hidden");
+
+    const left = state.crop.x * scaleX;
+    const top = state.crop.y * scaleY;
+    const width = state.crop.w * scaleX;
+    const height = state.crop.h * scaleY;
+    const right = Math.max(0, rect.width - left - width);
+    const bottom = Math.max(0, rect.height - top - height);
+
+    cropBox.style.left = `${left}px`;
+    cropBox.style.top = `${top}px`;
+    cropBox.style.width = `${width}px`;
+    cropBox.style.height = `${height}px`;
+    cropOverlay.style.setProperty("--crop-left", `${left}px`);
+    cropOverlay.style.setProperty("--crop-top", `${top}px`);
+    cropOverlay.style.setProperty("--crop-right", `${right}px`);
+    cropOverlay.style.setProperty("--crop-bottom", `${bottom}px`);
+  }
+
   function normalizeCrop(crop) {
     const source = state.processedCanvas;
     const maxW = Math.max(1, source.width);
@@ -147,7 +189,8 @@
   function setCrop(crop) {
     state.crop = normalizeCrop(crop);
     syncCropInputs();
-    renderCroppedResult();
+    updateCropOverlay();
+    updateExportBlob();
   }
 
   function setFullCrop() {
@@ -192,27 +235,42 @@
     });
   }
 
-  async function renderCroppedResult() {
+  function renderFullResult() {
+    const source = state.processedCanvas;
+    if (!source.width || !source.height) {
+      return;
+    }
+
+    const ctx = resultCanvas.getContext("2d", { willReadFrequently: false });
+    resultCanvas.width = source.width;
+    resultCanvas.height = source.height;
+    ctx.clearRect(0, 0, source.width, source.height);
+    ctx.drawImage(source, 0, 0);
+    updateCropOverlay();
+  }
+
+  async function updateExportBlob() {
     const source = state.processedCanvas;
     if (!source.width || !source.height) {
       return;
     }
 
     const crop = normalizeCrop(state.crop);
-    const ctx = resultCanvas.getContext("2d", { willReadFrequently: false });
-    resultCanvas.width = crop.w;
-    resultCanvas.height = crop.h;
+    const exportCanvas = state.exportCanvas;
+    const ctx = exportCanvas.getContext("2d", { willReadFrequently: false });
+    exportCanvas.width = crop.w;
+    exportCanvas.height = crop.h;
     ctx.clearRect(0, 0, crop.w, crop.h);
     ctx.drawImage(source, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
 
     resultInfo.textContent = `${crop.w} × ${crop.h}px`;
-    const blob = await canvasToPngBlob(resultCanvas);
+    const blob = await canvasToPngBlob(exportCanvas);
     if (!blob) {
       setStatus("PNGの作成に失敗しました。");
       return;
     }
     setDownload(blob, state.fileName);
-    setStatus("完了。PNGをトリミング、ダウンロード、ドラッグできます。");
+    setStatus("完了。矩形範囲をダウンロード、ドラッグできます。");
   }
 
   function renderOriginal(bitmap) {
@@ -267,6 +325,7 @@
     if (state.crop.w > bitmap.width || state.crop.h > bitmap.height) {
       state.crop = { x: 0, y: 0, w: bitmap.width, h: bitmap.height };
     }
+    renderFullResult();
     setCrop(state.crop);
   }
 
@@ -422,6 +481,101 @@
       setCrop({ ...state.crop, [key]: Number(input.value) });
     });
   }
+
+  function getCropPoint(event) {
+    const { rect, scaleX, scaleY } = getDisplayMetrics();
+    return {
+      x: clamp((event.clientX - rect.left) / scaleX, 0, state.processedCanvas.width),
+      y: clamp((event.clientY - rect.top) / scaleY, 0, state.processedCanvas.height),
+    };
+  }
+
+  function cropFromDrag(startCrop, dx, dy, handle) {
+    const source = state.processedCanvas;
+    let x1 = startCrop.x;
+    let y1 = startCrop.y;
+    let x2 = startCrop.x + startCrop.w;
+    let y2 = startCrop.y + startCrop.h;
+
+    if (handle === "move") {
+      const x = clamp(startCrop.x + dx, 0, source.width - startCrop.w);
+      const y = clamp(startCrop.y + dy, 0, source.height - startCrop.h);
+      return { x, y, w: startCrop.w, h: startCrop.h };
+    }
+
+    if (handle.includes("w")) {
+      x1 += dx;
+    }
+    if (handle.includes("e")) {
+      x2 += dx;
+    }
+    if (handle.includes("n")) {
+      y1 += dy;
+    }
+    if (handle.includes("s")) {
+      y2 += dy;
+    }
+
+    x1 = clamp(x1, 0, source.width - 1);
+    y1 = clamp(y1, 0, source.height - 1);
+    x2 = clamp(x2, 1, source.width);
+    y2 = clamp(y2, 1, source.height);
+
+    if (x2 <= x1) {
+      if (handle.includes("w")) {
+        x1 = x2 - 1;
+      } else {
+        x2 = x1 + 1;
+      }
+    }
+    if (y2 <= y1) {
+      if (handle.includes("n")) {
+        y1 = y2 - 1;
+      } else {
+        y2 = y1 + 1;
+      }
+    }
+
+    return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+  }
+
+  cropBox.addEventListener("pointerdown", (event) => {
+    if (!state.bitmap) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const point = getCropPoint(event);
+    state.cropDrag = {
+      handle: event.target.dataset.handle || "move",
+      pointerId: event.pointerId,
+      startPoint: point,
+      startCrop: { ...state.crop },
+    };
+    cropBox.setPointerCapture(event.pointerId);
+  });
+
+  cropBox.addEventListener("pointermove", (event) => {
+    if (!state.cropDrag || state.cropDrag.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    const point = getCropPoint(event);
+    const dx = point.x - state.cropDrag.startPoint.x;
+    const dy = point.y - state.cropDrag.startPoint.y;
+    setCrop(cropFromDrag(state.cropDrag.startCrop, dx, dy, state.cropDrag.handle));
+  });
+
+  function endCropDrag(event) {
+    if (!state.cropDrag || state.cropDrag.pointerId !== event.pointerId) {
+      return;
+    }
+    state.cropDrag = null;
+  }
+
+  cropBox.addEventListener("pointerup", endCropDrag);
+  cropBox.addEventListener("pointercancel", endCropDrag);
+  window.addEventListener("resize", updateCropOverlay);
 
   function handleResultDragStart(event) {
     if (!state.outputBlob || downloadLink.classList.contains("disabled")) {

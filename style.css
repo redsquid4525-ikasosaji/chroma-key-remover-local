@@ -194,12 +194,10 @@ h1 {
 }
 
 .crop-controls {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  margin: 18px 0;
-  padding: 16px 18px 18px;
-  box-shadow: var(--shadow);
+  width: 100%;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(121, 133, 150, 0.35);
 }
 
 .crop-head {
@@ -291,6 +289,11 @@ h1 {
   background: #f9fafb;
 }
 
+.result-drop {
+  align-content: center;
+  justify-items: center;
+}
+
 .checker {
   background-color: #fff;
   background-image:
@@ -310,16 +313,130 @@ canvas {
   border-radius: 12px;
 }
 
-.result-drop {
-  cursor: grab;
+.crop-stage {
+  position: relative;
+  display: inline-grid;
+  max-width: 100%;
+  max-height: 520px;
+  touch-action: none;
 }
 
-.result-drop:active {
-  cursor: grabbing;
+.crop-stage canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  user-select: none;
 }
 
-.result-drop canvas {
-  cursor: grab;
+.crop-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.crop-overlay.is-hidden {
+  display: none;
+}
+
+.crop-shade {
+  position: absolute;
+  background: rgba(18, 24, 32, 0.38);
+}
+
+.crop-shade-top {
+  inset: 0 0 auto 0;
+  height: var(--crop-top, 0);
+}
+
+.crop-shade-right {
+  top: var(--crop-top, 0);
+  right: 0;
+  bottom: var(--crop-bottom, 0);
+  width: var(--crop-right, 0);
+}
+
+.crop-shade-bottom {
+  inset: auto 0 0 0;
+  height: var(--crop-bottom, 0);
+}
+
+.crop-shade-left {
+  top: var(--crop-top, 0);
+  bottom: var(--crop-bottom, 0);
+  left: 0;
+  width: var(--crop-left, 0);
+}
+
+.crop-box {
+  position: absolute;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(12, 124, 82, 0.9), 0 8px 24px rgba(0, 0, 0, 0.22);
+  cursor: move;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.crop-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.28);
+}
+
+.crop-handle.nw {
+  left: -8px;
+  top: -8px;
+  cursor: nwse-resize;
+}
+
+.crop-handle.n {
+  left: 50%;
+  top: -8px;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+
+.crop-handle.ne {
+  right: -8px;
+  top: -8px;
+  cursor: nesw-resize;
+}
+
+.crop-handle.e {
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+
+.crop-handle.se {
+  right: -8px;
+  bottom: -8px;
+  cursor: nwse-resize;
+}
+
+.crop-handle.s {
+  left: 50%;
+  bottom: -8px;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+
+.crop-handle.sw {
+  left: -8px;
+  bottom: -8px;
+  cursor: nesw-resize;
+}
+
+.crop-handle.w {
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: ew-resize;
 }
 
 @media (max-width: 900px) {
