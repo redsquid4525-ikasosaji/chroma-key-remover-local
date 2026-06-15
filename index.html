@@ -68,6 +68,34 @@
       <p id="status" class="status">画像を読み込んでください。</p>
     </section>
 
+    <section class="crop-controls" aria-label="Crop transparent PNG">
+      <div class="crop-head">
+        <h2>Crop</h2>
+        <div class="crop-actions">
+          <button id="autoCropButton" type="button" class="secondary" disabled>透明余白をトリミング</button>
+          <button id="resetCropButton" type="button" class="secondary" disabled>全体に戻す</button>
+        </div>
+      </div>
+      <div class="crop-grid">
+        <label>
+          X
+          <input id="cropX" type="number" min="0" value="0" disabled />
+        </label>
+        <label>
+          Y
+          <input id="cropY" type="number" min="0" value="0" disabled />
+        </label>
+        <label>
+          W
+          <input id="cropW" type="number" min="1" value="1" disabled />
+        </label>
+        <label>
+          H
+          <input id="cropH" type="number" min="1" value="1" disabled />
+        </label>
+      </div>
+    </section>
+
     <section class="preview-grid">
       <article class="preview-card">
         <div class="card-head">
@@ -84,8 +112,8 @@
           <h3>Transparent PNG</h3>
           <span id="resultInfo">-</span>
         </div>
-        <div class="canvas-wrap checker">
-          <canvas id="resultCanvas"></canvas>
+        <div id="resultDrop" class="canvas-wrap checker result-drop" draggable="true" aria-label="Drag transparent PNG">
+          <canvas id="resultCanvas" draggable="true"></canvas>
         </div>
       </article>
     </section>

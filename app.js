@@ -7,11 +7,21 @@
   const fileInput = $("fileInput");
   const originalCanvas = $("originalCanvas");
   const resultCanvas = $("resultCanvas");
+  const resultDrop = $("resultDrop");
   const originalInfo = $("originalInfo");
   const resultInfo = $("resultInfo");
   const downloadLink = $("downloadLink");
   const statusEl = $("status");
   const resetButton = $("resetButton");
+  const autoCropButton = $("autoCropButton");
+  const resetCropButton = $("resetCropButton");
+
+  const cropInputs = {
+    x: $("cropX"),
+    y: $("cropY"),
+    w: $("cropW"),
+    h: $("cropH"),
+  };
 
   const inputs = {
     greenMin: $("greenMin"),
@@ -42,6 +52,10 @@
     bitmap: null,
     fileName: "transparent.png",
     objectUrl: null,
+    outputBlob: null,
+    outputFileName: "transparent.png",
+    processedCanvas: document.createElement("canvas"),
+    crop: { x: 0, y: 0, w: 1, h: 1 },
   };
 
   function clamp(value, min, max) {
@@ -91,10 +105,114 @@
       URL.revokeObjectURL(state.objectUrl);
     }
     state.objectUrl = URL.createObjectURL(blob);
+    state.outputBlob = blob;
+    state.outputFileName = makeOutputFileName(fileName);
     downloadLink.href = state.objectUrl;
-    downloadLink.download = makeOutputFileName(fileName);
+    downloadLink.download = state.outputFileName;
     downloadLink.classList.remove("disabled");
     downloadLink.setAttribute("aria-disabled", "false");
+  }
+
+  function setCropEnabled(enabled) {
+    for (const input of Object.values(cropInputs)) {
+      input.disabled = !enabled;
+    }
+    autoCropButton.disabled = !enabled;
+    resetCropButton.disabled = !enabled;
+  }
+
+  function syncCropInputs() {
+    const source = state.processedCanvas;
+    cropInputs.x.max = Math.max(0, source.width - 1);
+    cropInputs.y.max = Math.max(0, source.height - 1);
+    cropInputs.w.max = Math.max(1, source.width - state.crop.x);
+    cropInputs.h.max = Math.max(1, source.height - state.crop.y);
+    cropInputs.x.value = state.crop.x;
+    cropInputs.y.value = state.crop.y;
+    cropInputs.w.value = state.crop.w;
+    cropInputs.h.value = state.crop.h;
+  }
+
+  function normalizeCrop(crop) {
+    const source = state.processedCanvas;
+    const maxW = Math.max(1, source.width);
+    const maxH = Math.max(1, source.height);
+    const x = clamp(Math.round(crop.x) || 0, 0, maxW - 1);
+    const y = clamp(Math.round(crop.y) || 0, 0, maxH - 1);
+    const w = clamp(Math.round(crop.w) || 1, 1, maxW - x);
+    const h = clamp(Math.round(crop.h) || 1, 1, maxH - y);
+    return { x, y, w, h };
+  }
+
+  function setCrop(crop) {
+    state.crop = normalizeCrop(crop);
+    syncCropInputs();
+    renderCroppedResult();
+  }
+
+  function setFullCrop() {
+    setCrop({
+      x: 0,
+      y: 0,
+      w: state.processedCanvas.width || 1,
+      h: state.processedCanvas.height || 1,
+    });
+  }
+
+  function findOpaqueBounds() {
+    const source = state.processedCanvas;
+    const ctx = source.getContext("2d", { willReadFrequently: true });
+    const { width, height } = source;
+    const data = ctx.getImageData(0, 0, width, height).data;
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (data[(y * width + x) * 4 + 3] > 0) {
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+      }
+    }
+
+    if (maxX < minX || maxY < minY) {
+      return { x: 0, y: 0, w: width, h: height };
+    }
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  }
+
+  function canvasToPngBlob(canvas) {
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), "image/png");
+    });
+  }
+
+  async function renderCroppedResult() {
+    const source = state.processedCanvas;
+    if (!source.width || !source.height) {
+      return;
+    }
+
+    const crop = normalizeCrop(state.crop);
+    const ctx = resultCanvas.getContext("2d", { willReadFrequently: false });
+    resultCanvas.width = crop.w;
+    resultCanvas.height = crop.h;
+    ctx.clearRect(0, 0, crop.w, crop.h);
+    ctx.drawImage(source, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
+
+    resultInfo.textContent = `${crop.w} × ${crop.h}px`;
+    const blob = await canvasToPngBlob(resultCanvas);
+    if (!blob) {
+      setStatus("PNGの作成に失敗しました。");
+      return;
+    }
+    setDownload(blob, state.fileName);
+    setStatus("完了。PNGをトリミング、ダウンロード、ドラッグできます。");
   }
 
   function renderOriginal(bitmap) {
@@ -116,6 +234,7 @@
     const bitmap = await createImageBitmap(file);
     state.bitmap = bitmap;
     state.fileName = file.name || "image.png";
+    state.crop = { x: 0, y: 0, w: bitmap.width, h: bitmap.height };
 
     renderOriginal(bitmap);
     await processCurrentImage();
@@ -133,9 +252,10 @@
 
     setStatus("緑抜き処理中...");
 
-    const ctx = resultCanvas.getContext("2d", { willReadFrequently: true });
-    resultCanvas.width = bitmap.width;
-    resultCanvas.height = bitmap.height;
+    const fullCanvas = state.processedCanvas;
+    const ctx = fullCanvas.getContext("2d", { willReadFrequently: true });
+    fullCanvas.width = bitmap.width;
+    fullCanvas.height = bitmap.height;
     ctx.clearRect(0, 0, bitmap.width, bitmap.height);
     ctx.drawImage(bitmap, 0, 0);
 
@@ -143,16 +263,11 @@
     applyChromaKey(imageData, bitmap.width, bitmap.height, params);
     ctx.putImageData(imageData, 0, 0);
 
-    resultInfo.textContent = `${bitmap.width} × ${bitmap.height}px`;
-
-    resultCanvas.toBlob((blob) => {
-      if (!blob) {
-        setStatus("PNGの作成に失敗しました。");
-        return;
-      }
-      setDownload(blob, state.fileName);
-      setStatus("完了。PNGをダウンロードできます。");
-    }, "image/png");
+    setCropEnabled(true);
+    if (state.crop.w > bitmap.width || state.crop.h > bitmap.height) {
+      state.crop = { x: 0, y: 0, w: bitmap.width, h: bitmap.height };
+    }
+    setCrop(state.crop);
   }
 
   function applyChromaKey(imageData, width, height, params) {
@@ -288,5 +403,54 @@
 
   resetButton.addEventListener("click", resetControls);
 
+  autoCropButton.addEventListener("click", () => {
+    if (!state.bitmap) {
+      return;
+    }
+    setCrop(findOpaqueBounds());
+  });
+
+  resetCropButton.addEventListener("click", () => {
+    if (!state.bitmap) {
+      return;
+    }
+    setFullCrop();
+  });
+
+  for (const [key, input] of Object.entries(cropInputs)) {
+    input.addEventListener("change", () => {
+      setCrop({ ...state.crop, [key]: Number(input.value) });
+    });
+  }
+
+  function handleResultDragStart(event) {
+    if (!state.outputBlob || downloadLink.classList.contains("disabled")) {
+      event.preventDefault();
+      return;
+    }
+
+    const file = new File([state.outputBlob], state.outputFileName, {
+      type: "image/png",
+      lastModified: Date.now(),
+    });
+
+    event.dataTransfer.effectAllowed = "copy";
+    try {
+      event.dataTransfer.items.add(file);
+    } catch {
+      // Some browsers reject File items for outbound drags; URL fallbacks below still help.
+    }
+    event.dataTransfer.setData(
+      "DownloadURL",
+      `image/png:${state.outputFileName}:${state.objectUrl}`,
+    );
+    event.dataTransfer.setData("text/uri-list", state.objectUrl);
+    event.dataTransfer.setData("text/plain", state.objectUrl);
+  }
+
+  resultCanvas.addEventListener("dragstart", handleResultDragStart);
+  resultDrop.addEventListener("dragstart", handleResultDragStart);
+
+  setCropEnabled(false);
   updateLabels();
 })();
