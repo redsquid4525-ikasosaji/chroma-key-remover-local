@@ -16,6 +16,7 @@
   const downloadLink = $("downloadLink");
   const statusEl = $("status");
   const resetButton = $("resetButton");
+  const copyButton = $("copyButton");
   const autoCropButton = $("autoCropButton");
   const resetCropButton = $("resetCropButton");
 
@@ -122,6 +123,7 @@
     for (const input of Object.values(cropInputs)) {
       input.disabled = !enabled;
     }
+    copyButton.disabled = !enabled;
     autoCropButton.disabled = !enabled;
     resetCropButton.disabled = !enabled;
   }
@@ -474,6 +476,28 @@
       return;
     }
     setFullCrop();
+  });
+
+  copyButton.addEventListener("click", async () => {
+    if (!state.outputBlob) {
+      return;
+    }
+    if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
+      setStatus("このブラウザでは画像コピーに対応していません。");
+      return;
+    }
+
+    try {
+      copyButton.disabled = true;
+      await navigator.clipboard.write([
+        new ClipboardItem({ [state.outputBlob.type]: state.outputBlob }),
+      ]);
+      setStatus("クロップ範囲をクリップボードにコピーしました。");
+    } catch {
+      setStatus("コピーできませんでした。ブラウザの権限やHTTPS/localhost条件を確認してください。");
+    } finally {
+      copyButton.disabled = !state.outputBlob;
+    }
   });
 
   for (const [key, input] of Object.entries(cropInputs)) {
