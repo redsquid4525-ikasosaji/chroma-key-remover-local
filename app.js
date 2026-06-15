@@ -237,6 +237,15 @@
     });
   }
 
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(reader.result));
+      reader.addEventListener("error", () => reject(reader.error));
+      reader.readAsDataURL(blob);
+    });
+  }
+
   function renderFullResult() {
     const source = state.processedCanvas;
     if (!source.width || !source.height) {
@@ -489,8 +498,25 @@
 
     try {
       copyButton.disabled = true;
+      const dataUrl = await blobToDataUrl(state.outputBlob);
+      const htmlBlob = new Blob(
+        [`<img src="${dataUrl}" alt="${state.outputFileName}">`],
+        { type: "text/html" },
+      );
+      const textBlob = new Blob([state.outputFileName], { type: "text/plain" });
+      const itemData = {
+        "image/png": state.outputBlob,
+        "text/html": htmlBlob,
+        "text/plain": textBlob,
+      };
+      const supportedItemData = Object.fromEntries(
+        Object.entries(itemData).filter(([type]) => {
+          return !ClipboardItem.supports || ClipboardItem.supports(type);
+        }),
+      );
+
       await navigator.clipboard.write([
-        new ClipboardItem({ [state.outputBlob.type]: state.outputBlob }),
+        new ClipboardItem(supportedItemData),
       ]);
       setStatus("クロップ範囲をクリップボードにコピーしました。");
     } catch {
